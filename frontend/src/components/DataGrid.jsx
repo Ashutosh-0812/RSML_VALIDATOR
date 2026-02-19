@@ -37,7 +37,7 @@ const DataGrid = ({ projectId }) => {
             try {
                 const token = localStorage.getItem('token');
                 // Fetch first page to inspect data for audio detection
-                const response = await axios.get(`http://localhost:5000/viewer/projects/${projectId}?page=1&limit=1`, {
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}?page=1&limit=1`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
@@ -99,7 +99,8 @@ const DataGrid = ({ projectId }) => {
                             },
                             width: 300,
                             editable: false,
-                            filter: false
+                            filter: false,
+                            pinned: 'left'
                         });
                     }
 
@@ -192,7 +193,7 @@ const DataGrid = ({ projectId }) => {
 
                 try {
                     const token = localStorage.getItem('token');
-                    const response = await axios.get(`http://localhost:5000/viewer/projects/${projectId}?page=${page}&limit=${pageSize}`, {
+                    const response = await axios.get(`${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}?page=${page}&limit=${pageSize}`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
 

@@ -28,7 +28,7 @@ const Dashboard = () => {
     const fetchProjects = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:5000/viewer/projects', {
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/viewer/projects`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setProjects(response.data);
@@ -53,7 +53,7 @@ const Dashboard = () => {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`http://localhost:5000/admin/projects/${projectId}`, {
+            await axios.delete(`${import.meta.env.VITE_API_URL}/admin/projects/${projectId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             fetchProjects(); // Refresh list after delete

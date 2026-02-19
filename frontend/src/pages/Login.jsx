@@ -10,7 +10,7 @@ const Login = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
-            const response = await axios.post('http://localhost:5000/auth/login', { username, password });
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, { username, password });
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('role', response.data.user.role);
             navigate('/dashboard');
@@ -22,7 +22,7 @@ const Login = () => {
     const handleRegister = async () => {
         try {
             // For simplicity, registering as reviewer mainly, but admin if specified
-            await axios.post('http://localhost:5000/auth/register', { username, password, role: 'reviewer' });
+            await axios.post(`${import.meta.env.VITE_API_URL}/auth/register`, { username, password, role: 'reviewer' });
             alert('Registration successful! Please login.');
         } catch (error) {
             alert('Registration failed: ' + (error.response?.data?.message || 'Unknown error'));
