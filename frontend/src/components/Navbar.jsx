@@ -15,10 +15,13 @@ const Navbar = ({ role }) => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '1rem 2rem',
+            padding: '1rem 0',
             backgroundColor: '#ffffff',
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            marginBottom: '2rem'
+            marginBottom: '2rem',
+            borderRadius: '12px',
+            paddingLeft: '1.5rem',
+            paddingRight: '1.5rem',
         }}>
             <h2 style={{ margin: 0, color: '#007bff' }}>RSML Validator</h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

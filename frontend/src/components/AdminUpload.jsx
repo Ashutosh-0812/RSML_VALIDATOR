@@ -85,14 +85,13 @@ const AdminUpload = ({ onUploadSuccess }) => {
         formData.append('selectedHeaders', JSON.stringify(
             selectedFields.length > 0 ? selectedFields : allHeaders
         ));
-
         setUploading(true);
         try {
             const token = localStorage.getItem('token');
             await axios.post(`${import.meta.env.VITE_API_URL}/admin/upload`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
             });
-            alert('File uploaded successfully!');
+            alert('Project created successfully!');
             setFile(null); setProjectName(''); setSelectedFields([]); setAllHeaders([]); setQuery('');
             if (onUploadSuccess) onUploadSuccess();
         } catch (error) {
@@ -102,89 +101,123 @@ const AdminUpload = ({ onUploadSuccess }) => {
         }
     };
 
-    const inputBoxStyle = {
+    const fieldStyle = {
         width: '100%',
-        padding: '10px 14px',
+        padding: '12px 16px',
         borderRadius: '8px',
-        border: '1px solid #ccc',
-        fontSize: '0.92em',
+        border: '1.5px solid #d0e3ff',
+        fontSize: '0.93em',
         boxSizing: 'border-box',
         outline: 'none',
+        backgroundColor: '#fff',
+        transition: 'border-color 0.2s',
+        color: '#212529',
+        fontFamily: 'inherit',
     };
 
     return (
         <div style={{
-            backgroundColor: '#fff',
-            border: '1px solid #d0d0d0',
-            borderRadius: '14px',
-            padding: '28px 32px 24px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.06)',
-            maxWidth: '700px',
+            backgroundColor: '#ffffff',
+            border: '1.5px solid #cde0ff',
+            borderRadius: '16px',
+            padding: '32px 40px 28px',
+            boxShadow: '0 4px 24px rgba(13,110,253,0.08)',
+            width: '100%',
+            boxSizing: 'border-box',
         }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                {/* Project Name */}
-                <input
-                    type="text"
-                    placeholder="Project Name"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    style={{ ...inputBoxStyle, fontWeight: 600 }}
-                />
+                {/* Row 1: Project Name */}
+                <div style={{ position: 'relative' }}>
+                    <span style={{
+                        position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)',
+                        fontSize: '1em', pointerEvents: 'none', opacity: 0.4
+                    }}>📝</span>
+                    <input
+                        type="text"
+                        placeholder="Project Name"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        style={{ ...fieldStyle, paddingLeft: '40px', fontWeight: 600 }}
+                        onFocus={e => e.target.style.borderColor = '#0d6efd'}
+                        onBlur={e => e.target.style.borderColor = '#d0e3ff'}
+                    />
+                </div>
 
-                {/* CSV File picker — styled as a full-width row */}
+                {/* Row 2: Upload CSV */}
                 <label style={{
-                    ...inputBoxStyle,
+                    ...fieldStyle,
                     display: 'flex',
                     alignItems: 'center',
-                    cursor: 'pointer',
-                    color: file ? '#212529' : '#6c757d',
-                    fontWeight: 600,
                     gap: '10px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    color: file ? '#212529' : '#6c757d',
+                    borderStyle: 'dashed',
+                    borderColor: file ? '#0d6efd' : '#d0e3ff',
+                    backgroundColor: file ? '#f0f7ff' : '#fafcff',
+                    transition: 'all 0.2s',
                 }}>
-                    <span style={{ flex: 1 }}>{file ? `📄 ${file.name}` : 'Upload CSV'}</span>
+                    <span style={{ fontSize: '1.1em' }}>{file ? '📄' : '📂'}</span>
+                    <span style={{ flex: 1 }}>
+                        {file
+                            ? <>{file.name} <span style={{ fontWeight: 400, color: '#6c757d', fontSize: '0.85em' }}>· {allHeaders.length} columns detected</span></>
+                            : 'Upload CSV — click to browse'
+                        }
+                    </span>
+                    {file && (
+                        <span
+                            onClick={(e) => { e.preventDefault(); setFile(null); setAllHeaders([]); setSelectedFields([]); }}
+                            style={{ fontSize: '1em', color: '#dc3545', fontWeight: 'bold', cursor: 'pointer' }}
+                        >×</span>
+                    )}
                     <input type="file" accept=".csv" onChange={handleFileChange} style={{ display: 'none' }} />
                 </label>
 
-                {/* Select Fields — only shows after CSV loaded */}
+                {/* Row 3: Select Fields */}
                 <div style={{ position: 'relative' }}>
                     <div
                         onClick={() => { if (allHeaders.length > 0) { inputRef.current?.focus(); setShowDropdown(true); } }}
                         style={{
-                            ...inputBoxStyle,
+                            ...fieldStyle,
                             display: 'flex',
                             flexWrap: 'wrap',
                             gap: '6px',
                             alignItems: 'center',
-                            minHeight: '42px',
-                            cursor: allHeaders.length > 0 ? 'text' : 'not-allowed',
-                            backgroundColor: allHeaders.length === 0 ? '#f8f9fa' : '#fff',
+                            minHeight: '48px',
+                            cursor: allHeaders.length > 0 ? 'text' : 'default',
+                            backgroundColor: allHeaders.length === 0 ? '#f8faff' : '#fff',
+                            borderColor: showDropdown ? '#0d6efd' : '#d0e3ff',
                         }}
                     >
                         {selectedFields.length === 0 && query === '' && (
-                            <span style={{ color: '#6c757d', fontWeight: 600, pointerEvents: 'none' }}>
-                                Select Fields
+                            <span style={{ color: '#6c757d', fontWeight: 600, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>🗂</span>
+                                {allHeaders.length === 0 ? 'Select Fields (upload a CSV first)' : 'Select Fields — type to search…'}
                             </span>
                         )}
+
                         {selectedFields.map(field => {
                             const locked = LOCKED_FIELDS.includes(field);
                             return (
                                 <span key={field} style={{
                                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                                     backgroundColor: locked ? '#6c757d' : '#0d6efd',
-                                    color: 'white', borderRadius: '14px',
-                                    padding: '2px 10px', fontSize: '0.8em', fontWeight: 600,
+                                    color: '#fff', borderRadius: '20px',
+                                    padding: '3px 12px', fontSize: '0.8em', fontWeight: 600,
+                                    boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
                                 }}>
                                     {field}
                                     {!locked && (
                                         <span
                                             onMouseDown={(e) => { e.preventDefault(); removeField(field); }}
-                                            style={{ cursor: 'pointer', marginLeft: '2px', fontWeight: 'bold' }}
+                                            style={{ cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold', opacity: 0.8 }}
                                         >×</span>
                                     )}
                                 </span>
                             );
                         })}
+
                         {allHeaders.length > 0 && (
                             <input
                                 ref={inputRef}
@@ -194,9 +227,10 @@ const AdminUpload = ({ onUploadSuccess }) => {
                                 onKeyDown={handleKeyDown}
                                 style={{
                                     border: 'none', outline: 'none',
-                                    fontSize: '0.88em', minWidth: '100px', flex: 1,
+                                    fontSize: '0.88em', minWidth: '140px', flex: 1,
+                                    backgroundColor: 'transparent', fontFamily: 'inherit',
                                 }}
-                                placeholder={selectedFields.length <= LOCKED_FIELDS.length ? 'Type to search fields…' : ''}
+                                placeholder={selectedFields.length <= LOCKED_FIELDS.length ? 'Type to search columns…' : ''}
                             />
                         )}
                     </div>
@@ -207,10 +241,10 @@ const AdminUpload = ({ onUploadSuccess }) => {
                             ref={dropdownRef}
                             style={{
                                 position: 'absolute', top: '100%', left: 0, right: 0,
-                                marginTop: '3px', backgroundColor: '#fff',
-                                border: '1px solid #ced4da', borderRadius: '8px',
-                                boxShadow: '0 4px 14px rgba(0,0,0,0.1)', zIndex: 999,
-                                maxHeight: '220px', overflowY: 'auto',
+                                marginTop: '4px', backgroundColor: '#fff',
+                                border: '1.5px solid #d0e3ff', borderRadius: '10px',
+                                boxShadow: '0 8px 24px rgba(13,110,253,0.12)', zIndex: 999,
+                                maxHeight: '240px', overflowY: 'auto',
                             }}
                         >
                             {suggestions.map((s, i) => (
@@ -218,38 +252,63 @@ const AdminUpload = ({ onUploadSuccess }) => {
                                     key={s}
                                     onMouseDown={(e) => { e.preventDefault(); addField(s); }}
                                     style={{
-                                        padding: '8px 14px', cursor: 'pointer', fontSize: '0.88em',
-                                        fontFamily: 'monospace', borderBottom: i < suggestions.length - 1 ? '1px solid #f1f3f5' : 'none',
-                                        backgroundColor: i === 0 ? '#e8f0fe' : 'transparent',
+                                        padding: '9px 16px', cursor: 'pointer',
+                                        fontSize: '0.87em', fontFamily: 'monospace',
+                                        borderBottom: i < suggestions.length - 1 ? '1px solid #f0f4ff' : 'none',
+                                        backgroundColor: i === 0 ? '#eef4ff' : 'transparent',
+                                        color: '#212529',
                                     }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e8f0fe'}
-                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = i === 0 ? '#e8f0fe' : 'transparent'}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#eef4ff'}
+                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = i === 0 ? '#eef4ff' : 'transparent'}
                                 >
                                     {s}
                                 </div>
                             ))}
                         </div>
                     )}
+
+                    {/* Quick actions */}
+                    {allHeaders.length > 0 && (
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '6px', fontSize: '0.8em' }}>
+                            <button
+                                onClick={() => setSelectedFields([...new Set([...LOCKED_FIELDS.filter(f => allHeaders.includes(f)), ...allHeaders.filter(h => !LOCKED_FIELDS.includes(h))])])}
+                                style={{ background: 'none', border: 'none', color: '#0d6efd', cursor: 'pointer', padding: 0, fontWeight: 600, textDecoration: 'underline', fontSize: 'inherit' }}
+                            >
+                                Add all ({allHeaders.length})
+                            </button>
+                            <button
+                                onClick={() => setSelectedFields([...LOCKED_FIELDS.filter(f => allHeaders.includes(f))])}
+                                style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer', padding: 0, fontWeight: 600, textDecoration: 'underline', fontSize: 'inherit' }}
+                            >
+                                Clear
+                            </button>
+                            <span style={{ marginLeft: 'auto', color: '#6c757d' }}>
+                                {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} selected
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Upload button */}
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
                     <button
                         onClick={handleUpload}
                         disabled={uploading}
                         style={{
-                            backgroundColor: '#fff',
-                            color: '#212529',
-                            border: '1.5px solid #aaa',
-                            padding: '8px 40px',
-                            borderRadius: '20px',
+                            background: uploading ? '#adb5bd' : 'linear-gradient(135deg, #0d6efd, #0a58ca)',
+                            color: '#fff',
+                            border: 'none',
+                            padding: '10px 52px',
+                            borderRadius: '24px',
                             cursor: uploading ? 'not-allowed' : 'pointer',
                             fontWeight: 700,
                             fontSize: '0.95em',
-                            opacity: uploading ? 0.6 : 1,
+                            boxShadow: uploading ? 'none' : '0 4px 14px rgba(13,110,253,0.3)',
+                            transition: 'all 0.2s',
+                            letterSpacing: '0.3px',
                         }}
                     >
-                        {uploading ? 'Uploading…' : 'Upload'}
+                        {uploading ? '⏳ Uploading…' : 'Upload'}
                     </button>
                 </div>
 
