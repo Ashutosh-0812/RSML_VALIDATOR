@@ -17,10 +17,58 @@ const AudioCellRenderer = (params) => {
     );
 };
 
-const DataGrid = ({ projectId }) => {
+const ValidateCellRenderer = ({ data, projectId, role, onValidated }) => {
+    const [status, setStatus] = useState(null); // null | 'loading' | 'done'
+    const isValidated = data?._validated || status === 'done';
+
+    if (!role || (role !== 'admin' && role !== 'reviewer')) return null;
+
+    const handleClick = async (e) => {
+        e.stopPropagation();
+        if (isValidated) return;
+        setStatus('loading');
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(
+                `${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}/rows/${data._id}/validate`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setStatus('done');
+            if (onValidated) onValidated(data._id);
+        } catch (err) {
+            console.error('Row validate error:', err);
+            setStatus(null);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleClick}
+            disabled={status === 'loading' || isValidated}
+            style={{
+                backgroundColor: isValidated ? '#28a745' : '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '3px 10px',
+                fontSize: '0.8em',
+                cursor: isValidated || status === 'loading' ? 'default' : 'pointer',
+                fontWeight: 600,
+                opacity: status === 'loading' ? 0.7 : 1,
+                whiteSpace: 'nowrap'
+            }}
+        >
+            {status === 'loading' ? '⏳...' : isValidated ? '✔ Validated' : '✓ Validate'}
+        </button>
+    );
+};
+
+const DataGrid = ({ projectId, role }) => {
     const [gridApi, setGridApi] = useState(null);
     const [columnDefs, setColumnDefs] = useState([]);
     const [projectInfo, setProjectInfo] = useState(null);
+    const [validateStatus, setValidateStatus] = useState(null); // null | 'loading' | 'success' | 'error'
     const [rsmlEditorState, setRsmlEditorState] = useState({
         isOpen: false,
         value: '',
@@ -104,8 +152,12 @@ const DataGrid = ({ projectId }) => {
                         });
                     }
 
-                    // 2. Add remaining columns
-                    project.headers.forEach(header => {
+                    // 2. Add remaining columns (only selected headers, fallback to all)
+                    const headersToShow = (project.selectedHeaders && project.selectedHeaders.length > 0)
+                        ? project.selectedHeaders
+                        : project.headers;
+
+                    headersToShow.forEach(header => {
                         const colDef = {
                             field: header,
                             headerName: header.charAt(0).toUpperCase() + header.slice(1),
@@ -129,7 +181,33 @@ const DataGrid = ({ projectId }) => {
                         cols.push(colDef);
                     });
 
-                    setColumnDefs(cols);
+                    // 3. Add Validate action column (pinned right, for admin/reviewer)
+                    const currentRole = localStorage.getItem('role');
+                    if (currentRole === 'admin' || currentRole === 'reviewer') {
+                        cols.unshift({
+                            headerName: 'Validate',
+                            field: '_validated',
+                            width: 120,
+                            pinned: 'right',
+                            editable: false,
+                            filter: false,
+                            sortable: false,
+                            cellRenderer: (params) => (
+                                <ValidateCellRenderer
+                                    data={params.data}
+                                    projectId={projectId}
+                                    role={currentRole}
+                                    onValidated={(rowId) => {
+                                        if (params.node) {
+                                            params.node.setDataValue('_validated', true);
+                                        }
+                                    }}
+                                />
+                            )
+                        });
+                    }
+
+                    setColumnDefs([...cols]);
                 }
             } catch (error) {
                 console.error('Error fetching project info:', error);
@@ -178,6 +256,26 @@ const DataGrid = ({ projectId }) => {
         setGridApi(params.api);
     }, []);
 
+    const handleValidateAll = async () => {
+        if (!projectId) return;
+        setValidateStatus('loading');
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(
+                `${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}/validate`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setProjectInfo(prev => prev ? { ...prev, validated: true } : prev);
+            setValidateStatus('success');
+            setTimeout(() => setValidateStatus(null), 3000);
+        } catch (error) {
+            console.error('Error validating project:', error);
+            setValidateStatus('error');
+            setTimeout(() => setValidateStatus(null), 3000);
+        }
+    };
+
     // Set Datasource when API and Project Info are ready
     useEffect(() => {
         if (!gridApi || !projectId || !projectInfo) return;
@@ -221,7 +319,54 @@ const DataGrid = ({ projectId }) => {
                     <h3 style={{ margin: 0 }}>
                         {projectInfo ? projectInfo.name : 'Loading...'}
                         {projectInfo && <span style={{ fontSize: '0.8em', color: '#666' }}> ({projectInfo.totalRows} rows)</span>}
+                        {projectInfo && projectInfo.validated && (
+                            <span style={{
+                                marginLeft: '10px',
+                                fontSize: '0.75em',
+                                background: '#d4edda',
+                                color: '#155724',
+                                border: '1px solid #c3e6cb',
+                                borderRadius: '12px',
+                                padding: '2px 10px',
+                                fontWeight: 600,
+                                verticalAlign: 'middle'
+                            }}>✔ Validated</span>
+                        )}
                     </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {validateStatus === 'success' && (
+                            <span style={{ color: '#155724', background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '6px', padding: '4px 14px', fontSize: '0.9em' }}>
+                                ✔ Project validated successfully!
+                            </span>
+                        )}
+                        {validateStatus === 'error' && (
+                            <span style={{ color: '#721c24', background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '6px', padding: '4px 14px', fontSize: '0.9em' }}>
+                                ✖ Validation failed. Try again.
+                            </span>
+                        )}
+                        {(role === 'admin' || role === 'reviewer') && (
+                            <button
+                                onClick={handleValidateAll}
+                                disabled={validateStatus === 'loading'}
+                                style={{
+                                    backgroundColor: projectInfo && projectInfo.validated ? '#28a745' : '#007bff',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '6px 16px',
+                                    borderRadius: '5px',
+                                    cursor: validateStatus === 'loading' ? 'not-allowed' : 'pointer',
+                                    fontWeight: 600,
+                                    fontSize: '0.9em',
+                                    opacity: validateStatus === 'loading' ? 0.7 : 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                {validateStatus === 'loading' ? '⏳ Validating...' : (projectInfo && projectInfo.validated ? '✔ Validated' : '✓ Validate All')}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>

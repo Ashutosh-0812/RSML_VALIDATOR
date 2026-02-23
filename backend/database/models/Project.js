@@ -7,12 +7,24 @@ const projectSchema = new mongoose.Schema({
     },
     // Removed 'data' array to avoid 16MB limit. Data is now stored in 'DataRow' collection.
     headers: {
-        type: [String], // Store headers for frontend to setup grid columns
+        type: [String], // All headers from CSV
+        default: []
+    },
+    selectedHeaders: {
+        type: [String], // Admin-chosen columns to display
         default: []
     },
     totalRows: {
         type: Number,
         default: 0
+    },
+    validated: {
+        type: Boolean,
+        default: false
+    },
+    validatedAt: {
+        type: Date,
+        default: null
     },
     createdAt: {
         type: Date,

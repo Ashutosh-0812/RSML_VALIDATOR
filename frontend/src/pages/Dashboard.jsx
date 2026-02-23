@@ -80,7 +80,7 @@ const Dashboard = () => {
                             <h3 style={{ margin: 0 }}>Project View</h3>
                         </div>
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                            <DataGrid projectId={selectedProjectId} isFullScreen={true} />
+                            <DataGrid projectId={selectedProjectId} isFullScreen={true} role={role} />
                         </div>
                     </div>
                 ) : (

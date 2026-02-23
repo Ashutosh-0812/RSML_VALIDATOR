@@ -5,12 +5,20 @@ const dataRowSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Project',
         required: true,
-        index: true // Index for faster queries by project
+        index: true
     },
     data: {
         type: Map,
         of: mongoose.Schema.Types.Mixed,
         required: true
+    },
+    validated: {
+        type: Boolean,
+        default: false
+    },
+    validatedAt: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
 
