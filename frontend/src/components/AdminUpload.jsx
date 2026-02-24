@@ -8,9 +8,11 @@ const AdminUpload = ({ onUploadSuccess }) => {
     const [projectName, setProjectName] = useState('');
     const [allHeaders, setAllHeaders] = useState([]);
     const [selectedFields, setSelectedFields] = useState([]);
+    const [customCols, setCustomCols] = useState([]); // user-typed custom columns
     const [query, setQuery] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
     const [uploading, setUploading] = useState(false);
+
     const inputRef = useRef(null);
     const dropdownRef = useRef(null);
 
@@ -56,14 +58,32 @@ const AdminUpload = ({ onUploadSuccess }) => {
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && query.trim()) {
             e.preventDefault();
-            if (suggestions[0]) addField(suggestions[0]);
+            if (suggestions[0]) {
+                // Match found in CSV headers → add as regular field
+                addField(suggestions[0]);
+            } else {
+                // No CSV match → add as custom column
+                const trimmed = query.trim();
+                if (!customCols.includes(trimmed) && !selectedFields.includes(trimmed)) {
+                    setCustomCols(prev => [...prev, trimmed]);
+                }
+                setQuery('');
+                setShowDropdown(false);
+            }
         } else if (e.key === 'Backspace' && query === '') {
-            const removable = selectedFields.filter(f => !LOCKED_FIELDS.includes(f));
-            if (removable.length > 0) removeField(removable[removable.length - 1]);
+            // Remove last custom col first, then last regular field
+            if (customCols.length > 0) {
+                setCustomCols(prev => prev.slice(0, -1));
+            } else {
+                const removable = selectedFields.filter(f => !LOCKED_FIELDS.includes(f));
+                if (removable.length > 0) removeField(removable[removable.length - 1]);
+            }
         } else if (e.key === 'Escape') {
             setShowDropdown(false);
         }
     };
+
+    const removeCustomCol = (col) => setCustomCols(prev => prev.filter(c => c !== col));
 
     useEffect(() => {
         const handler = (e) => {
@@ -74,6 +94,7 @@ const AdminUpload = ({ onUploadSuccess }) => {
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    // ── Upload ────────────────────────────────────────────────────────────────
     const handleUpload = async () => {
         if (!file || !projectName.trim()) {
             alert('Please enter a project name and select a CSV file.');
@@ -85,6 +106,7 @@ const AdminUpload = ({ onUploadSuccess }) => {
         formData.append('selectedHeaders', JSON.stringify(
             selectedFields.length > 0 ? selectedFields : allHeaders
         ));
+        formData.append('customColumns', JSON.stringify(customCols));
         setUploading(true);
         try {
             const token = localStorage.getItem('token');
@@ -92,7 +114,8 @@ const AdminUpload = ({ onUploadSuccess }) => {
                 headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
             });
             alert('Project created successfully!');
-            setFile(null); setProjectName(''); setSelectedFields([]); setAllHeaders([]); setQuery('');
+            setFile(null); setProjectName(''); setSelectedFields([]); setAllHeaders([]);
+            setQuery(''); setCustomCols([]);
             if (onUploadSuccess) onUploadSuccess();
         } catch (error) {
             alert('Upload failed: ' + (error.response?.data?.message || 'Unknown error'));
@@ -147,11 +170,8 @@ const AdminUpload = ({ onUploadSuccess }) => {
                 {/* Row 2: Upload CSV */}
                 <label style={{
                     ...fieldStyle,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    cursor: 'pointer', fontWeight: 600,
                     color: file ? '#212529' : '#6c757d',
                     borderStyle: 'dashed',
                     borderColor: file ? '#0d6efd' : '#d0e3ff',
@@ -180,11 +200,8 @@ const AdminUpload = ({ onUploadSuccess }) => {
                         onClick={() => { if (allHeaders.length > 0) { inputRef.current?.focus(); setShowDropdown(true); } }}
                         style={{
                             ...fieldStyle,
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: '6px',
-                            alignItems: 'center',
-                            minHeight: '48px',
+                            display: 'flex', flexWrap: 'wrap', gap: '6px',
+                            alignItems: 'center', minHeight: '48px',
                             cursor: allHeaders.length > 0 ? 'text' : 'default',
                             backgroundColor: allHeaders.length === 0 ? '#f8faff' : '#fff',
                             borderColor: showDropdown ? '#0d6efd' : '#d0e3ff',
@@ -218,6 +235,23 @@ const AdminUpload = ({ onUploadSuccess }) => {
                             );
                         })}
 
+                        {/* Custom column chips — purple */}
+                        {customCols.map(col => (
+                            <span key={`__custom__${col}`} style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                background: '#ede9fe', border: '1px solid #a78bfa',
+                                borderRadius: '20px', padding: '3px 12px',
+                                fontSize: '0.8em', color: '#5b21b6', fontWeight: 600,
+                                boxShadow: '0 1px 4px rgba(124,58,237,0.12)',
+                            }}>
+                                🟣 {col}
+                                <span
+                                    onMouseDown={(e) => { e.preventDefault(); removeCustomCol(col); }}
+                                    style={{ cursor: 'pointer', marginLeft: '2px', fontWeight: 'bold', opacity: 0.8 }}
+                                >×</span>
+                            </span>
+                        ))}
+
                         {allHeaders.length > 0 && (
                             <input
                                 ref={inputRef}
@@ -230,7 +264,7 @@ const AdminUpload = ({ onUploadSuccess }) => {
                                     fontSize: '0.88em', minWidth: '140px', flex: 1,
                                     backgroundColor: 'transparent', fontFamily: 'inherit',
                                 }}
-                                placeholder={selectedFields.length <= LOCKED_FIELDS.length ? 'Type to search columns…' : ''}
+                                placeholder={selectedFields.length <= LOCKED_FIELDS.length && customCols.length === 0 ? 'Search CSV columns or type new name + Enter…' : ''}
                             />
                         )}
                     </div>
@@ -276,18 +310,13 @@ const AdminUpload = ({ onUploadSuccess }) => {
                             >
                                 Add all ({allHeaders.length})
                             </button>
-                            <button
-                                onClick={() => setSelectedFields([...LOCKED_FIELDS.filter(f => allHeaders.includes(f))])}
-                                style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer', padding: 0, fontWeight: 600, textDecoration: 'underline', fontSize: 'inherit' }}
-                            >
-                                Clear
-                            </button>
                             <span style={{ marginLeft: 'auto', color: '#6c757d' }}>
                                 {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} selected
                             </span>
                         </div>
                     )}
                 </div>
+
 
                 {/* Upload button */}
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
@@ -296,16 +325,11 @@ const AdminUpload = ({ onUploadSuccess }) => {
                         disabled={uploading}
                         style={{
                             background: uploading ? '#adb5bd' : 'linear-gradient(135deg, #0d6efd, #0a58ca)',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '10px 52px',
-                            borderRadius: '24px',
-                            cursor: uploading ? 'not-allowed' : 'pointer',
-                            fontWeight: 700,
-                            fontSize: '0.95em',
+                            color: '#fff', border: 'none', padding: '10px 52px',
+                            borderRadius: '24px', cursor: uploading ? 'not-allowed' : 'pointer',
+                            fontWeight: 700, fontSize: '0.95em',
                             boxShadow: uploading ? 'none' : '0 4px 14px rgba(13,110,253,0.3)',
-                            transition: 'all 0.2s',
-                            letterSpacing: '0.3px',
+                            transition: 'all 0.2s', letterSpacing: '0.3px',
                         }}
                     >
                         {uploading ? '⏳ Uploading…' : 'Upload'}
