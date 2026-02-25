@@ -3,7 +3,7 @@ const csv = require('csv-parser');
 const Project = require('../../../database/models/Project');
 const DataRow = require('../../../database/models/DataRow');
 
-exports.processCsvUpload = async (fileInfo, projectName, selectedHeaders = []) => {
+exports.processCsvUpload = async (fileInfo, projectName, selectedHeaders = [], customColumns = []) => {
     const filePath = fileInfo.path;
     const batchSize = 1; // Absolute minimum to debug
 
@@ -61,6 +61,7 @@ exports.processCsvUpload = async (fileInfo, projectName, selectedHeaders = []) =
                 // Update project stats
                 project.headers = headers;
                 project.selectedHeaders = selectedHeaders.length > 0 ? selectedHeaders : headers;
+                project.customColumns = customColumns;
                 project.totalRows = rowCount;
                 await project.save();
 

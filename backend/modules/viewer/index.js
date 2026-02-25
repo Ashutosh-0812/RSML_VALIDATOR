@@ -14,4 +14,11 @@ router.put('/projects/:id/validate', authMiddleware, roleMiddleware(['admin', 'r
 // Validate a single row/segment: Admin and Reviewer
 router.put('/projects/:id/rows/:rowId/validate', authMiddleware, roleMiddleware(['admin', 'reviewer']), viewerController.validateRow);
 
+// Custom columns: add / remove (any authenticated user)
+router.post('/projects/:id/custom-columns', authMiddleware, viewerController.addCustomColumn);
+router.delete('/projects/:id/custom-columns/:colName', authMiddleware, viewerController.removeCustomColumn);
+
+// Custom cell value: update
+router.put('/projects/:id/rows/:rowId/custom-cell', authMiddleware, viewerController.updateCustomCell);
+
 module.exports = router;

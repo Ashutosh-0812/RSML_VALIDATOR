@@ -149,11 +149,9 @@ const DataGrid = ({ projectId, role }) => {
         field: `__custom__${colName}`,
         editable: true,
         resizable: true,
-        filter: false,
-        sortable: false,
+        filter: true,
+        sortable: true,
         width: 180,
-        headerClass: 'custom-col-header',
-        cellClass: 'custom-col-cell',
         valueSetter: (params) => {
             const rowId = params.data?._id;
             if (!rowId) return false;

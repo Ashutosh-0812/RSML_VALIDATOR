@@ -14,6 +14,10 @@ const projectSchema = new mongoose.Schema({
         type: [String], // Admin-chosen columns to display
         default: []
     },
+    customColumns: {
+        type: [String], // User-added custom columns
+        default: []
+    },
     totalRows: {
         type: Number,
         default: 0

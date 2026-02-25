@@ -9,7 +9,7 @@ exports.uploadCsv = async (req, res) => {
             return res.status(400).json({ message: 'No file uploaded' });
         }
 
-        const { projectName, selectedHeaders } = req.body;
+        const { projectName, selectedHeaders, customColumns } = req.body;
         if (!projectName) {
             return res.status(400).json({ message: 'Project name is required' });
         }
@@ -20,7 +20,13 @@ exports.uploadCsv = async (req, res) => {
             try { parsedSelectedHeaders = JSON.parse(selectedHeaders); } catch (e) { }
         }
 
-        const project = await csvService.processCsvUpload(req.file, projectName, parsedSelectedHeaders);
+        // customColumns is sent as a JSON string in FormData
+        let parsedCustomColumns = [];
+        if (customColumns) {
+            try { parsedCustomColumns = JSON.parse(customColumns); } catch (e) { }
+        }
+
+        const project = await csvService.processCsvUpload(req.file, projectName, parsedSelectedHeaders, parsedCustomColumns);
         res.status(201).json({ message: 'Project created and CSV parsed successfully', project });
     } catch (error) {
         res.status(500).json({ message: error.message });

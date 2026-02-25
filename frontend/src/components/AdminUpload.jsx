@@ -235,19 +235,19 @@ const AdminUpload = ({ onUploadSuccess }) => {
                             );
                         })}
 
-                        {/* Custom column chips — purple */}
+                        {/* Custom column chips — same style as regular */}
                         {customCols.map(col => (
                             <span key={`__custom__${col}`} style={{
                                 display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                background: '#ede9fe', border: '1px solid #a78bfa',
-                                borderRadius: '20px', padding: '3px 12px',
-                                fontSize: '0.8em', color: '#5b21b6', fontWeight: 600,
-                                boxShadow: '0 1px 4px rgba(124,58,237,0.12)',
+                                backgroundColor: '#0d6efd',
+                                color: '#fff', borderRadius: '20px',
+                                padding: '3px 12px', fontSize: '0.8em', fontWeight: 600,
+                                boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
                             }}>
-                                🟣 {col}
+                                {col}
                                 <span
                                     onMouseDown={(e) => { e.preventDefault(); removeCustomCol(col); }}
-                                    style={{ cursor: 'pointer', marginLeft: '2px', fontWeight: 'bold', opacity: 0.8 }}
+                                    style={{ cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold', opacity: 0.8 }}
                                 >×</span>
                             </span>
                         ))}

@@ -45,10 +45,13 @@ exports.getProjectData = async (req, res) => {
         const rows = await DataRow.find({ projectId: id })
             .skip(skip)
             .limit(limit)
-            .lean(); // Faster query
+            .lean();
 
-        // Extract data + validated status for each row
-        const flatRows = rows.map(r => ({ ...r.data, _id: r._id, _validated: r.validated, _validatedAt: r.validatedAt }));
+        // Flatten row data + validated status + custom cell values
+        const flatRows = rows.map(r => {
+            const base = { ...r.data, _id: r._id, _validated: r.validated, _validatedAt: r.validatedAt };
+            return base;
+        });
 
         res.status(200).json({
             project: {
@@ -56,6 +59,7 @@ exports.getProjectData = async (req, res) => {
                 name: project.name,
                 headers: project.headers,
                 selectedHeaders: project.selectedHeaders,
+                customColumns: project.customColumns || [],
                 totalRows: project.totalRows,
                 validated: project.validated,
                 validatedAt: project.validatedAt
@@ -85,6 +89,80 @@ exports.validateRow = async (req, res) => {
         res.status(200).json({ message: 'Row validated successfully', validated: true, validatedAt: row.validatedAt });
     } catch (error) {
         console.error('Error validating row:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ── Custom Column: Add ──────────────────────────────────────────────────────
+exports.addCustomColumn = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { colName } = req.body;
+
+        if (!colName || !colName.trim()) {
+            return res.status(400).json({ message: 'Column name is required' });
+        }
+
+        const project = await Project.findById(id);
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        const trimmed = colName.trim();
+        if (!project.customColumns.includes(trimmed)) {
+            project.customColumns.push(trimmed);
+            await project.save();
+        }
+
+        res.status(200).json({ message: 'Custom column added', customColumns: project.customColumns });
+    } catch (error) {
+        console.error('Error adding custom column:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ── Custom Column: Remove ───────────────────────────────────────────────────
+exports.removeCustomColumn = async (req, res) => {
+    try {
+        const { id, colName } = req.params;
+
+        const project = await Project.findById(id);
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        project.customColumns = project.customColumns.filter(c => c !== colName);
+        await project.save();
+
+        res.status(200).json({ message: 'Custom column removed', customColumns: project.customColumns });
+    } catch (error) {
+        console.error('Error removing custom column:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ── Custom Cell: Update ─────────────────────────────────────────────────────
+exports.updateCustomCell = async (req, res) => {
+    try {
+        const { id, rowId } = req.params;
+        const { colName, value } = req.body;
+
+        if (!colName) {
+            return res.status(400).json({ message: 'colName is required' });
+        }
+
+        const row = await DataRow.findOne({ _id: rowId, projectId: id });
+        if (!row) {
+            return res.status(404).json({ message: 'Row not found' });
+        }
+
+        // Store under __custom__<colName> inside the data Map
+        row.data.set(`__custom__${colName}`, value ?? '');
+        await row.save();
+
+        res.status(200).json({ message: 'Custom cell updated' });
+    } catch (error) {
+        console.error('Error updating custom cell:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };

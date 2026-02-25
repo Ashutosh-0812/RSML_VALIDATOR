@@ -26,9 +26,9 @@ const seedAdmin = async () => {
             console.log('Admin user created successfully');
             console.log('Username: admin');
             console.log('Password: password123');
-        } //jfdldfhf dldcdclsjl ckjbca sakjcbabcscjbs  x xlk n  nx ,hchichcdcihxixk xjjbcbc jcxbcjklcnchcldc
+        }
 
-        // Check and create Reviewer
+
         const reviewerExists = await User.findOne({ username: 'Reviewer' });
         if (reviewerExists) {
             console.log('Reviewer user already exists');
@@ -38,7 +38,7 @@ const seedAdmin = async () => {
             const reviewerUser = new User({
                 username: 'Reviewer',
                 password: hashedPassword,
-                role: 'reviewer' // Fixed role to match enum in User model
+                role: 'reviewer'
             });
             await reviewerUser.save();
             console.log('Reviewer user created successfully');
