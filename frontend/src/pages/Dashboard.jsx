@@ -65,9 +65,13 @@ const Dashboard = () => {
 
     return (
         <div style={{ minHeight: '100vh', backgroundColor: '#f0f8ff', display: 'flex', flexDirection: 'column' }}>
-            {!selectedProjectId && <Navbar role={role} />}
 
-            <div style={selectedProjectId ? { flex: 1, display: 'flex', flexDirection: 'column' } : { maxWidth: '1200px', margin: '0 auto', padding: '0 2rem', width: '100%' }}>
+            <div style={selectedProjectId
+                ? { flex: 1, display: 'flex', flexDirection: 'column' }
+                : { maxWidth: '1200px', margin: '0 auto', padding: '0 2rem', width: '100%', boxSizing: 'border-box' }
+            }>
+                {!selectedProjectId && <Navbar role={role} />}
+
                 {selectedProjectId ? (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
                         <div style={{ padding: '10px 20px', backgroundColor: '#fff', borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
@@ -80,13 +84,16 @@ const Dashboard = () => {
                             <h3 style={{ margin: 0 }}>Project View</h3>
                         </div>
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                            <DataGrid projectId={selectedProjectId} isFullScreen={true} />
+                            <DataGrid projectId={selectedProjectId} isFullScreen={true} role={role} />
                         </div>
                     </div>
                 ) : (
                     <>
                         {role === 'admin' && (
-                            <div style={{ marginBottom: '2rem', marginTop: '2rem' }}>
+                            <div style={{ marginTop: '0', marginBottom: '2rem' }}>
+                                <h2 style={{ textAlign: 'center', marginBottom: '1rem', color: '#007bff', fontSize: '1.2em', letterSpacing: '0.5px' }}>
+                                    Create New Project
+                                </h2>
                                 <AdminUpload onUploadSuccess={fetchProjects} />
                             </div>
                         )}
