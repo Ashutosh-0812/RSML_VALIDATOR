@@ -18,6 +18,9 @@ router.put('/projects/:id/rows/:rowId/validate', authMiddleware, roleMiddleware(
 router.post('/projects/:id/custom-columns', authMiddleware, viewerController.addCustomColumn);
 router.delete('/projects/:id/custom-columns/:colName', authMiddleware, viewerController.removeCustomColumn);
 
+// Regular cell value: update (for RSML and other regular columns)
+router.put('/projects/:id/rows/:rowId/cell', authMiddleware, viewerController.updateRowCell);
+
 // Custom cell value: update
 router.put('/projects/:id/rows/:rowId/custom-cell', authMiddleware, viewerController.updateCustomCell);
 

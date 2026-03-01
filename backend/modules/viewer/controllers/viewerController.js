@@ -141,6 +141,31 @@ exports.removeCustomColumn = async (req, res) => {
     }
 };
 
+// ── Regular Cell: Update ───────────────────────────────────────────────────
+exports.updateRowCell = async (req, res) => {
+    try {
+        const { id, rowId } = req.params;
+        const { field, value } = req.body;
+
+        if (!field) {
+            return res.status(400).json({ message: 'field is required' });
+        }
+
+        const row = await DataRow.findOne({ _id: rowId, projectId: id });
+        if (!row) {
+            return res.status(404).json({ message: 'Row not found' });
+        }
+
+        row.data.set(field, value ?? '');
+        await row.save();
+
+        res.status(200).json({ message: 'Cell updated' });
+    } catch (error) {
+        console.error('Error updating row cell:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // ── Custom Cell: Update ─────────────────────────────────────────────────────
 exports.updateCustomCell = async (req, res) => {
     try {

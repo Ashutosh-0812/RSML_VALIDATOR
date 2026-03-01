@@ -108,12 +108,12 @@ const AddColumnDialog = ({ onAdd, onClose, saving }) => {
                 />
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                     <button onClick={onClose} disabled={saving} style={{
-                        padding: '7px 18px', borderRadius: '6px', border: '1px solid #ccc',
-                        background: '#f5f5f5', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 500
+                        padding: '7px 18px', borderRadius: '6px', border: 'none',
+                        background: '#dc2626', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600
                     }}>Cancel</button>
                     <button onClick={handleAdd} disabled={saving} style={{
                         padding: '7px 18px', borderRadius: '6px', border: 'none',
-                        background: '#7c3aed', color: '#fff',
+                        background: '#1d4ed8', color: '#fff',
                         cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600,
                         opacity: saving ? 0.7 : 1
                     }}>
@@ -326,19 +326,26 @@ const DataGrid = ({ projectId, role }) => {
         }
     }, []);
 
-    const handleRsmlSave = (newValue) => {
+    const handleRsmlSave = async (newValue) => {
         if (rsmlEditorState.node) {
             rsmlEditorState.node.setDataValue(rsmlEditorState.colId, newValue);
-            // If it's a custom column, also persist to DB
-            if (rsmlEditorState.isCustom) {
-                const colName = rsmlEditorState.colId.replace('__custom__', '');
-                const rowId = rsmlEditorState.node.data?._id;
-                if (rowId) {
+            const rowId = rsmlEditorState.node.data?._id;
+            if (rowId) {
+                if (rsmlEditorState.isCustom) {
+                    // Custom column → existing endpoint
+                    const colName = rsmlEditorState.colId.replace('__custom__', '');
                     axios.put(
                         `${apiBase}/rows/${rowId}/custom-cell`,
                         { colName, value: newValue },
                         { headers: authHeader() }
                     ).catch(err => console.error('Failed to save custom cell via RSML:', err));
+                } else {
+                    // Regular column (rsml_verbatim, rsml_normalized, etc.) → new endpoint
+                    axios.put(
+                        `${apiBase}/rows/${rowId}/cell`,
+                        { field: rsmlEditorState.colId, value: newValue },
+                        { headers: authHeader() }
+                    ).catch(err => console.error('Failed to save row cell via RSML:', err));
                 }
             }
         }
@@ -392,9 +399,9 @@ const DataGrid = ({ projectId, role }) => {
     return (
         <div style={{ position: 'relative', height: '100%' }}>
             <style>{`
-                .custom-col-header .ag-header-cell-label { color: #7c3aed; font-weight: 700; }
-                .custom-col-header { background: #f3f0ff !important; border-left: 2px solid #a78bfa !important; }
-                .custom-col-cell { background: #faf8ff; }
+                .custom-col-header .ag-header-cell-label { color: #1d4ed8; font-weight: 700; }
+                .custom-col-header { background: #eff6ff !important; border-left: 2px solid #93c5fd !important; }
+                .custom-col-cell { background: #f8faff; }
             `}</style>
 
             <div className="card" style={{ maxWidth: '100%', padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -428,9 +435,9 @@ const DataGrid = ({ projectId, role }) => {
                         {customCols.map(colName => (
                             <span key={colName} style={{
                                 display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                background: '#ede9fe', border: '1px solid #a78bfa',
+                                background: '#dbeafe', border: '1px solid #93c5fd',
                                 borderRadius: '14px', padding: '3px 10px',
-                                fontSize: '0.82em', color: '#5b21b6', fontWeight: 600
+                                fontSize: '0.82em', color: '#1e40af', fontWeight: 600
                             }}>
                                 {colName}
                                 <button
@@ -438,7 +445,7 @@ const DataGrid = ({ projectId, role }) => {
                                     onClick={() => handleRemoveColumn(colName)}
                                     style={{
                                         background: 'none', border: 'none', cursor: 'pointer',
-                                        color: '#7c3aed', fontWeight: 700, fontSize: '1em',
+                                        color: '#1d4ed8', fontWeight: 700, fontSize: '1em',
                                         lineHeight: 1, padding: 0, marginTop: '-1px'
                                     }}
                                 >×</button>
@@ -452,8 +459,8 @@ const DataGrid = ({ projectId, role }) => {
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '5px',
                                 padding: '6px 14px', borderRadius: '6px',
-                                border: '1.5px dashed #7c3aed', background: '#f5f3ff',
-                                color: '#7c3aed', cursor: 'pointer', fontWeight: 600,
+                                border: '1.5px dashed #3b82f6', background: '#eff6ff',
+                                color: '#1d4ed8', cursor: 'pointer', fontWeight: 600,
                                 fontSize: '0.88em', whiteSpace: 'nowrap'
                             }}
                         >
