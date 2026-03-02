@@ -10,41 +10,28 @@ const seedAdmin = async () => {
     try {
         await connectDB();
 
-        // Check and create Admin
-        const adminExists = await User.findOne({ username: 'admin' });
-        if (adminExists) {
-            console.log('Admin user already exists');
-        } else {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('password123', salt);
-            const adminUser = new User({
-                username: 'admin',
-                password: hashedPassword,
-                role: 'admin'
-            });
-            await adminUser.save();
-            console.log('Admin user created successfully');
-            console.log('Username: admin');
-            console.log('Password: password123');
-        }
+        // Clear all existing users
+        await User.deleteMany({});
+        console.log('All existing users cleared.');
 
+        // Seed Admin user
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash('password123', salt);
+        const adminUser = new User({
+            name: 'Admin',
+            email: 'admin@rsml.com',
+            password: hashedPassword,
+            role: 'admin'
+        });
+        await adminUser.save();
 
-        const reviewerExists = await User.findOne({ username: 'Reviewer' });
-        if (reviewerExists) {
-            console.log('Reviewer user already exists');
-        } else {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('password123', salt);
-            const reviewerUser = new User({
-                username: 'Reviewer',
-                password: hashedPassword,
-                role: 'reviewer'
-            });
-            await reviewerUser.save();
-            console.log('Reviewer user created successfully');
-            console.log('Username: Reviewer');
-            console.log('Password: password123');
-        }
+        console.log('\nAdmin user created successfully!');
+        console.log('-----------------------------');
+        console.log('Name    : Admin');
+        console.log('Email   : admin@rsml.com');
+        console.log('Password: password123');
+        console.log('Role    : admin');
+        console.log('-----------------------------');
 
         process.exit();
     } catch (error) {

@@ -353,6 +353,25 @@ const DataGrid = ({ projectId, role }) => {
     };
     const handleRsmlClose = () => setRsmlEditorState(prev => ({ ...prev, isOpen: false }));
 
+    // Persist inline cell edits for regular (non-custom) columns
+    const handleCellValueChanged = useCallback(async (params) => {
+        const field = params.colDef.field;
+        if (!field || field.startsWith('__custom__') || field === '_validated') return;
+        const rowId = params.data?._id;
+        if (!rowId) return;
+        try {
+            await axios.put(
+                `${apiBase}/rows/${rowId}/cell`,
+                { field, value: params.newValue },
+                { headers: authHeader() }
+            );
+        } catch (err) {
+            console.error('Failed to save cell edit:', err);
+            // Revert the cell to the old value on failure
+            params.node.setDataValue(field, params.oldValue);
+        }
+    }, [projectId]);
+
     const onGridReady = useCallback((params) => { setGridApi(params.api); }, []);
 
     const handleValidateAll = async () => {
@@ -504,6 +523,7 @@ const DataGrid = ({ projectId, role }) => {
                                 cacheBlockSize={1}
                                 onGridReady={onGridReady}
                                 onCellDoubleClicked={handleCellDoubleClicked}
+                                onCellValueChanged={handleCellValueChanged}
                                 defaultColDef={{ sortable: false, filter: false }}
                             />
                         </div>

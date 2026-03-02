@@ -2,9 +2,9 @@ const User = require('../../../database/models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-exports.login = async (username, password) => {
-    // Check if user exists
-    const user = await User.findOne({ username });
+exports.login = async (email, password) => {
+    // Check if user exists by email
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
         throw new Error('Invalid credentials');
     }
@@ -26,7 +26,8 @@ exports.login = async (username, password) => {
         token,
         user: {
             _id: user._id,
-            username: user.username,
+            name: user.name,
+            email: user.email,
             role: user.role
         }
     };

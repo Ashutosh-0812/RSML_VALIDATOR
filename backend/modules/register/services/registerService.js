@@ -2,10 +2,10 @@ const User = require('../../../database/models/User');
 const bcrypt = require('bcryptjs');
 
 exports.register = async (userData) => {
-    const { username, password, role } = userData;
+    const { name, email, password, role } = userData;
 
-    // Check if user exists
-    const existingUser = await User.findOne({ username });
+    // Check if user exists by email
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
     if (existingUser) {
         throw new Error('User already exists');
     }
@@ -16,16 +16,18 @@ exports.register = async (userData) => {
 
     // Create user
     const user = new User({
-        username,
+        name,
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
-        role: role || 'reviewer' // Default role
+        role: role || 'reviewer'
     });
 
     await user.save();
 
     return {
         _id: user._id,
-        username: user.username,
+        name: user.name,
+        email: user.email,
         role: user.role
     };
 };
