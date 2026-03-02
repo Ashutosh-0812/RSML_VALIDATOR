@@ -64,26 +64,29 @@ const Dashboard = () => {
     };
 
     return (
-        <div style={{ minHeight: '100vh', backgroundColor: '#f0f8ff', display: 'flex', flexDirection: 'column' }}>
+        <div style={selectedProjectId
+            ? { height: '100vh', overflow: 'hidden', backgroundColor: '#f0f8ff', display: 'flex', flexDirection: 'column' }
+            : { minHeight: '100vh', backgroundColor: '#f0f8ff', display: 'flex', flexDirection: 'column' }
+        }>
 
             <div style={selectedProjectId
-                ? { flex: 1, display: 'flex', flexDirection: 'column' }
+                ? { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
                 : { maxWidth: '1200px', margin: '0 auto', padding: '0 2rem', width: '100%', boxSizing: 'border-box' }
             }>
                 {!selectedProjectId && <Navbar role={role} />}
 
                 {selectedProjectId ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                         <div style={{ padding: '10px 20px', backgroundColor: '#fff', borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                             <button
                                 onClick={handleBack}
                                 style={{ marginRight: '1rem', backgroundColor: '#6c757d', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
                             >
-                                &larr; Back to Projects
+                                ← Back to Projects
                             </button>
                             <h3 style={{ margin: 0 }}>Project View</h3>
                         </div>
-                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
                             <DataGrid projectId={selectedProjectId} isFullScreen={true} role={role} />
                         </div>
                     </div>

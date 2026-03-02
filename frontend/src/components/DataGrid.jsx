@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Resizable } from 're-resizable';
 import RSMLEditor from './RSMLEditor';
+import RSMLCellEditor from './RSMLCellEditor';
 
 import { AgGridReact } from 'ag-grid-react';
 import axios from 'axios';
@@ -230,7 +231,9 @@ const DataGrid = ({ projectId, role }) => {
                         const colDef = {
                             field: header,
                             headerName: header.charAt(0).toUpperCase() + header.slice(1),
-                            editable: true, filter: true, resizable: true
+                            editable: true, // all columns inline-editable on single click
+                            filter: true,
+                            resizable: true
                         };
                         const lowerHeader = header.toLowerCase();
                         if (
@@ -314,14 +317,16 @@ const DataGrid = ({ projectId, role }) => {
 
     const handleCellDoubleClicked = useCallback((params) => {
         const field = params.colDef.field;
-        const excludedColumns = [
+        const rsmlColumns = [
             'verbatim', 'normalized', 'unsanitized_verbatim', 'unsanitized_normalized',
             'rsml_verbatim', 'rsml_normalized', 'sarvam_hypothesis', 'rsml_sarvam',
             'hypothesis_ccc-wav2vec', 'rsml_ccc-wav2vec', 'hypothesis_google', 'rsml_google',
             'hypothesis_indic_conformer', 'rsml_indic_conformer'
         ];
         const isCustom = field?.startsWith('__custom__');
-        if (excludedColumns.includes(field) || isCustom) {
+        if (rsmlColumns.includes(field) || isCustom) {
+            // Cancel any AG Grid inline edit that fired on the same double-click
+            params.api.stopEditing(true);
             setRsmlEditorState({ isOpen: true, value: params.value ?? '', rowIndex: params.node.rowIndex, colId: field, node: params.node, isCustom });
         }
     }, []);
@@ -353,7 +358,33 @@ const DataGrid = ({ projectId, role }) => {
     };
     const handleRsmlClose = () => setRsmlEditorState(prev => ({ ...prev, isOpen: false }));
 
-    // Persist inline cell edits for regular (non-custom) columns
+    // Direct save used by RSMLCellEditor on Enter — handles both regular and custom columns
+    // Direct save called by RSMLCellEditor on Enter — does API call only.
+    // Display update is handled by the valueSetter in defaultColDef.
+    const handleInlineSave = useCallback(async (rowId, field, newValue) => {
+        if (!rowId || !field) return;
+        try {
+            if (field.startsWith('__custom__')) {
+                const colName = field.replace('__custom__', '');
+                await axios.put(
+                    `${apiBase}/rows/${rowId}/custom-cell`,
+                    { colName, value: newValue },
+                    { headers: authHeader() }
+                );
+            } else {
+                await axios.put(
+                    `${apiBase}/rows/${rowId}/cell`,
+                    { field, value: newValue },
+                    { headers: authHeader() }
+                );
+            }
+        } catch (err) {
+            console.error('Failed to save inline cell edit:', err);
+        }
+    }, [projectId]);
+
+    // Fallback save via onCellValueChanged for non-RSMLCellEditor edits.
+    // Display update already handled by valueSetter — only do the API call here.
     const handleCellValueChanged = useCallback(async (params) => {
         const field = params.colDef.field;
         if (!field || field.startsWith('__custom__') || field === '_validated') return;
@@ -367,8 +398,6 @@ const DataGrid = ({ projectId, role }) => {
             );
         } catch (err) {
             console.error('Failed to save cell edit:', err);
-            // Revert the cell to the old value on failure
-            params.node.setDataValue(field, params.oldValue);
         }
     }, [projectId]);
 
@@ -524,7 +553,22 @@ const DataGrid = ({ projectId, role }) => {
                                 onGridReady={onGridReady}
                                 onCellDoubleClicked={handleCellDoubleClicked}
                                 onCellValueChanged={handleCellValueChanged}
-                                defaultColDef={{ sortable: false, filter: false }}
+                                singleClickEdit={true}
+                                defaultColDef={{
+                                    sortable: false,
+                                    filter: false,
+                                    cellEditor: RSMLCellEditor,
+                                    cellEditorParams: { saveCell: handleInlineSave },
+                                    // CRITICAL for infinite row model: without a valueSetter,
+                                    // getValue() result is never written to node.data[field]
+                                    // so the cell always reverts to the old value after editing.
+                                    valueSetter: (params) => {
+                                        if (params.colDef.field) {
+                                            params.data[params.colDef.field] = params.newValue;
+                                        }
+                                        return true;
+                                    },
+                                }}
                             />
                         </div>
                     </Resizable>
