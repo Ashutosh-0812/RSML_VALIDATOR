@@ -4,7 +4,7 @@ import RSMLAnnotator from 'rsml';
 /**
  * Custom AG Grid cell editor that attaches RSMLAnnotator to a textarea,
  * enabling @, #, ! RSML tags during inline cell editing.
- *
+ * 
  * AG Grid injects: value, stopEditing, data, column, node, api
  * cellEditorParams injects: saveCell(rowId, field, newValue, node, api)
  */
@@ -12,8 +12,7 @@ const RSMLCellEditor = forwardRef(({ value, stopEditing, data, column, node, api
     const textareaRef = useRef(null);
     const outputRef = useRef(null);
     const annotatorRef = useRef(null);
-    // Must capture value BEFORE stopEditing() unmounts the component
-    // so getValue() still returns the correct value after unmount
+
     const committedValueRef = useRef(value);
 
     // AG Grid reads this to get the committed value when editing stops
