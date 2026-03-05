@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Resizable } from 're-resizable';
 import RSMLEditor from './RSMLEditor';
-import RSMLCellEditor from './RSMLCellEditor';
 
 import { AgGridReact } from 'ag-grid-react';
 import axios from 'axios';
@@ -110,11 +109,12 @@ const AddColumnDialog = ({ onAdd, onClose, saving }) => {
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                     <button onClick={onClose} disabled={saving} style={{
                         padding: '7px 18px', borderRadius: '6px', border: 'none',
-                        background: '#dc2626', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600
+                        background: '#dc3545', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                        fontWeight: 600, opacity: saving ? 0.7 : 1
                     }}>Cancel</button>
                     <button onClick={handleAdd} disabled={saving} style={{
                         padding: '7px 18px', borderRadius: '6px', border: 'none',
-                        background: '#1d4ed8', color: '#fff',
+                        background: '#007bff', color: '#fff',
                         cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600,
                         opacity: saving ? 0.7 : 1
                     }}>
@@ -150,9 +150,11 @@ const DataGrid = ({ projectId, role }) => {
         field: `__custom__${colName}`,
         editable: true,
         resizable: true,
-        filter: true,
-        sortable: true,
+        filter: false,
+        sortable: false,
         width: 180,
+        headerClass: 'custom-col-header',
+        cellClass: 'custom-col-cell',
         valueSetter: (params) => {
             const rowId = params.data?._id;
             if (!rowId) return false;
@@ -231,9 +233,7 @@ const DataGrid = ({ projectId, role }) => {
                         const colDef = {
                             field: header,
                             headerName: header.charAt(0).toUpperCase() + header.slice(1),
-                            editable: true, // all columns inline-editable on single click
-                            filter: true,
-                            resizable: true
+                            editable: true, filter: true, resizable: true
                         };
                         const lowerHeader = header.toLowerCase();
                         if (
@@ -317,89 +317,37 @@ const DataGrid = ({ projectId, role }) => {
 
     const handleCellDoubleClicked = useCallback((params) => {
         const field = params.colDef.field;
-        const rsmlColumns = [
+        const excludedColumns = [
             'verbatim', 'normalized', 'unsanitized_verbatim', 'unsanitized_normalized',
             'rsml_verbatim', 'rsml_normalized', 'sarvam_hypothesis', 'rsml_sarvam',
             'hypothesis_ccc-wav2vec', 'rsml_ccc-wav2vec', 'hypothesis_google', 'rsml_google',
             'hypothesis_indic_conformer', 'rsml_indic_conformer'
         ];
         const isCustom = field?.startsWith('__custom__');
-        if (rsmlColumns.includes(field) || isCustom) {
-            // Cancel any AG Grid inline edit that fired on the same double-click
-            params.api.stopEditing(true);
+        if (excludedColumns.includes(field) || isCustom) {
             setRsmlEditorState({ isOpen: true, value: params.value ?? '', rowIndex: params.node.rowIndex, colId: field, node: params.node, isCustom });
         }
     }, []);
 
-    const handleRsmlSave = async (newValue) => {
+    const handleRsmlSave = (newValue) => {
         if (rsmlEditorState.node) {
             rsmlEditorState.node.setDataValue(rsmlEditorState.colId, newValue);
-            const rowId = rsmlEditorState.node.data?._id;
-            if (rowId) {
-                if (rsmlEditorState.isCustom) {
-                    // Custom column → existing endpoint
-                    const colName = rsmlEditorState.colId.replace('__custom__', '');
+            // If it's a custom column, also persist to DB
+            if (rsmlEditorState.isCustom) {
+                const colName = rsmlEditorState.colId.replace('__custom__', '');
+                const rowId = rsmlEditorState.node.data?._id;
+                if (rowId) {
                     axios.put(
                         `${apiBase}/rows/${rowId}/custom-cell`,
                         { colName, value: newValue },
                         { headers: authHeader() }
                     ).catch(err => console.error('Failed to save custom cell via RSML:', err));
-                } else {
-                    // Regular column (rsml_verbatim, rsml_normalized, etc.) → new endpoint
-                    axios.put(
-                        `${apiBase}/rows/${rowId}/cell`,
-                        { field: rsmlEditorState.colId, value: newValue },
-                        { headers: authHeader() }
-                    ).catch(err => console.error('Failed to save row cell via RSML:', err));
                 }
             }
         }
         setRsmlEditorState(prev => ({ ...prev, isOpen: false }));
     };
     const handleRsmlClose = () => setRsmlEditorState(prev => ({ ...prev, isOpen: false }));
-
-    // Direct save used by RSMLCellEditor on Enter — handles both regular and custom columns
-    // Direct save called by RSMLCellEditor on Enter — does API call only.
-    // Display update is handled by the valueSetter in defaultColDef.
-    const handleInlineSave = useCallback(async (rowId, field, newValue) => {
-        if (!rowId || !field) return;
-        try {
-            if (field.startsWith('__custom__')) {
-                const colName = field.replace('__custom__', '');
-                await axios.put(
-                    `${apiBase}/rows/${rowId}/custom-cell`,
-                    { colName, value: newValue },
-                    { headers: authHeader() }
-                );
-            } else {
-                await axios.put(
-                    `${apiBase}/rows/${rowId}/cell`,
-                    { field, value: newValue },
-                    { headers: authHeader() }
-                );
-            }
-        } catch (err) {
-            console.error('Failed to save inline cell edit:', err);
-        }
-    }, [projectId]);
-
-    // Fallback save via onCellValueChanged for non-RSMLCellEditor edits.
-    // Display update already handled by valueSetter — only do the API call here.
-    const handleCellValueChanged = useCallback(async (params) => {
-        const field = params.colDef.field;
-        if (!field || field.startsWith('__custom__') || field === '_validated') return;
-        const rowId = params.data?._id;
-        if (!rowId) return;
-        try {
-            await axios.put(
-                `${apiBase}/rows/${rowId}/cell`,
-                { field, value: params.newValue },
-                { headers: authHeader() }
-            );
-        } catch (err) {
-            console.error('Failed to save cell edit:', err);
-        }
-    }, [projectId]);
 
     const onGridReady = useCallback((params) => { setGridApi(params.api); }, []);
 
@@ -447,9 +395,9 @@ const DataGrid = ({ projectId, role }) => {
     return (
         <div style={{ position: 'relative', height: '100%' }}>
             <style>{`
-                .custom-col-header .ag-header-cell-label { color: #1d4ed8; font-weight: 700; }
-                .custom-col-header { background: #eff6ff !important; border-left: 2px solid #93c5fd !important; }
-                .custom-col-cell { background: #f8faff; }
+                .custom-col-header .ag-header-cell-label { color: #007bff; font-weight: 700; }
+                .custom-col-header { background: #e7f1ff !important; border-left: 2px solid #007bff !important; }
+                .custom-col-cell { background: #f0f7ff; }
             `}</style>
 
             <div className="card" style={{ maxWidth: '100%', padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -483,9 +431,9 @@ const DataGrid = ({ projectId, role }) => {
                         {customCols.map(colName => (
                             <span key={colName} style={{
                                 display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                background: '#dbeafe', border: '1px solid #93c5fd',
+                                background: '#e7f1ff', border: '1px solid #007bff',
                                 borderRadius: '14px', padding: '3px 10px',
-                                fontSize: '0.82em', color: '#1e40af', fontWeight: 600
+                                fontSize: '0.82em', color: '#0056b3', fontWeight: 600
                             }}>
                                 {colName}
                                 <button
@@ -493,7 +441,7 @@ const DataGrid = ({ projectId, role }) => {
                                     onClick={() => handleRemoveColumn(colName)}
                                     style={{
                                         background: 'none', border: 'none', cursor: 'pointer',
-                                        color: '#1d4ed8', fontWeight: 700, fontSize: '1em',
+                                        color: '#dc3545', fontWeight: 700, fontSize: '1em',
                                         lineHeight: 1, padding: 0, marginTop: '-1px'
                                     }}
                                 >×</button>
@@ -507,8 +455,8 @@ const DataGrid = ({ projectId, role }) => {
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '5px',
                                 padding: '6px 14px', borderRadius: '6px',
-                                border: '1.5px dashed #3b82f6', background: '#eff6ff',
-                                color: '#1d4ed8', cursor: 'pointer', fontWeight: 600,
+                                border: '1.5px dashed #007bff', background: '#e7f1ff',
+                                color: '#007bff', cursor: 'pointer', fontWeight: 600,
                                 fontSize: '0.88em', whiteSpace: 'nowrap'
                             }}
                         >
@@ -552,23 +500,7 @@ const DataGrid = ({ projectId, role }) => {
                                 cacheBlockSize={1}
                                 onGridReady={onGridReady}
                                 onCellDoubleClicked={handleCellDoubleClicked}
-                                onCellValueChanged={handleCellValueChanged}
-                                singleClickEdit={true}
-                                defaultColDef={{
-                                    sortable: false,
-                                    filter: false,
-                                    cellEditor: RSMLCellEditor,
-                                    cellEditorParams: { saveCell: handleInlineSave },
-                                    // CRITICAL for infinite row model: without a valueSetter,
-                                    // getValue() result is never written to node.data[field]
-                                    // so the cell always reverts to the old value after editing.
-                                    valueSetter: (params) => {
-                                        if (params.colDef.field) {
-                                            params.data[params.colDef.field] = params.newValue;
-                                        }
-                                        return true;
-                                    },
-                                }}
+                                defaultColDef={{ sortable: false, filter: false }}
                             />
                         </div>
                     </Resizable>
