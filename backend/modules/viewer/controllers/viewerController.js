@@ -48,8 +48,13 @@ exports.getProjectData = async (req, res) => {
             .lean();
 
         // Flatten row data + validated status + custom cell values
+        // NOTE: .lean() returns Mongoose Map fields as a plain JS Map object.
+        // Spreading a Map with {...map} does NOT work — use Object.fromEntries() instead.
         const flatRows = rows.map(r => {
-            const base = { ...r.data, _id: r._id, _validated: r.validated, _validatedAt: r.validatedAt };
+            const dataObj = r.data instanceof Map
+                ? Object.fromEntries(r.data)
+                : (r.data || {});
+            const base = { ...dataObj, _id: r._id, _validated: r.validated, _validatedAt: r.validatedAt };
             return base;
         });
 
@@ -157,6 +162,7 @@ exports.updateRowCell = async (req, res) => {
         }
 
         row.data.set(field, value ?? '');
+        row.markModified('data'); // Required: Mongoose won't detect Map<Mixed> mutation without this
         await row.save();
 
         res.status(200).json({ message: 'Cell updated' });
@@ -183,6 +189,7 @@ exports.updateCustomCell = async (req, res) => {
 
         // Store under __custom__<colName> inside the data Map
         row.data.set(`__custom__${colName}`, value ?? '');
+        row.markModified('data'); // Required: Mongoose won't detect Map<Mixed> mutation without this
         await row.save();
 
         res.status(200).json({ message: 'Custom cell updated' });

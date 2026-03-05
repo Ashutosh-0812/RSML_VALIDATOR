@@ -325,28 +325,63 @@ const DataGrid = ({ projectId, role }) => {
         ];
         const isCustom = field?.startsWith('__custom__');
         if (excludedColumns.includes(field) || isCustom) {
-            setRsmlEditorState({ isOpen: true, value: params.value ?? '', rowIndex: params.node.rowIndex, colId: field, node: params.node, isCustom });
+            // Capture rowId NOW while node.data is guaranteed to be loaded
+            // In infinite scroll mode, node.data can become null after scrolling
+            const rowId = params.node.data?._id;
+            console.log('[RSML] Opening editor — field:', field, 'rowId:', rowId, 'value:', params.value);
+            setRsmlEditorState({
+                isOpen: true,
+                value: params.value ?? '',
+                rowIndex: params.node.rowIndex,
+                colId: field,
+                node: params.node,
+                rowId,       // ← stored eagerly while data is valid
+                isCustom,
+            });
         }
     }, []);
 
     const handleRsmlSave = (newValue) => {
-        if (rsmlEditorState.node) {
-            rsmlEditorState.node.setDataValue(rsmlEditorState.colId, newValue);
-            // If it's a custom column, also persist to DB
-            if (rsmlEditorState.isCustom) {
-                const colName = rsmlEditorState.colId.replace('__custom__', '');
-                const rowId = rsmlEditorState.node.data?._id;
-                if (rowId) {
-                    axios.put(
-                        `${apiBase}/rows/${rowId}/custom-cell`,
-                        { colName, value: newValue },
-                        { headers: authHeader() }
-                    ).catch(err => console.error('Failed to save custom cell via RSML:', err));
-                }
-            }
-        }
+        const { node, colId, rowId, isCustom } = rsmlEditorState;
+        console.log('[RSML] Saving — colId:', colId, 'rowId:', rowId, 'newValue:', newValue?.slice?.(0, 60));
+
+        // Close the modal immediately so UX feels snappy
         setRsmlEditorState(prev => ({ ...prev, isOpen: false }));
+
+        // Optimistically update the node's in-memory data so the cell shows new value right away
+        if (node) {
+            if (node.data) node.data[colId] = newValue;   // direct mutation of cached data
+            node.setDataValue(colId, newValue);             // notify AG Grid to re-render the cell
+        }
+
+        if (!rowId) {
+            console.warn('[RSML] Save skipped — rowId is missing!');
+            return;
+        }
+
+        const savePromise = isCustom
+            ? axios.put(
+                `${apiBase}/rows/${rowId}/custom-cell`,
+                { colName: colId.replace('__custom__', ''), value: newValue },
+                { headers: authHeader() }
+            )
+            : axios.put(
+                `${apiBase}/rows/${rowId}/cell`,
+                { field: colId, value: newValue },
+                { headers: authHeader() }
+            );
+
+        savePromise
+            .then((res) => {
+                console.log('[RSML] Saved OK — modifiedCount:', res.data?.modifiedCount);
+                // Force AG Grid to re-fetch this page from the server so it's in sync
+                if (gridApi) {
+                    gridApi.refreshInfiniteCache();
+                }
+            })
+            .catch(err => console.error('[RSML] Save failed:', err));
     };
+
     const handleRsmlClose = () => setRsmlEditorState(prev => ({ ...prev, isOpen: false }));
 
     const onGridReady = useCallback((params) => { setGridApi(params.api); }, []);
