@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import RSMLAnnotator from "rsml"; // Ensure this matches how the package exports itself
+import RSMLAnnotator from "rsml";
+import axios from "axios";
 
-const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
+const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose, projectId }) => {
   const [editableData, setEditableData] = useState({});
-  const textareaRef = useRef(null);
-  const outputRef = useRef(null);
+  const [savingField, setSavingField] = useState(null);
+
+  // Per-field refs: { [fieldName]: { textarea: el, output: el, annotator: instance } }
+  const fieldRefs = useRef({});
 
   useEffect(() => {
     if (rowData) {
@@ -12,36 +15,103 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
     }
   }, [rowData]);
 
-  useEffect(() => {
-    if (textareaRef.current && outputRef.current && editableData) {
-      try {
-        // Initialize RSML Annotator for the first RSML field found
-        new RSMLAnnotator({
-          textarea: textareaRef.current,
-          output: outputRef.current,
-        });
-      } catch (e) {
-        console.error("Failed to initialize RSML Annotator", e);
+  // ── Attach RSMLAnnotator to each RSML textarea after it mounts ──────────
+  // We use a callback ref pattern per field so the annotator is created once
+  // the DOM element actually exists.
+  const getTextareaRef = (fieldName) => (el) => {
+    if (!el) return;
+    if (!fieldRefs.current[fieldName]) {
+      fieldRefs.current[fieldName] = {};
+    }
+    fieldRefs.current[fieldName].textarea = el;
+    // Set initial value
+    el.value = editableData[fieldName] ?? rowData?.[fieldName] ?? "";
+    // Attach annotator once both textarea and output are present
+    maybeInitAnnotator(fieldName);
+  };
+
+  const getOutputRef = (fieldName) => (el) => {
+    if (!el) return;
+    if (!fieldRefs.current[fieldName]) {
+      fieldRefs.current[fieldName] = {};
+    }
+    fieldRefs.current[fieldName].output = el;
+    maybeInitAnnotator(fieldName);
+  };
+
+  const maybeInitAnnotator = (fieldName) => {
+    const refs = fieldRefs.current[fieldName];
+    if (!refs || !refs.textarea || !refs.output || refs.annotator) return;
+    try {
+      refs.annotator = new RSMLAnnotator({
+        textarea: refs.textarea,
+        output: refs.output,
+      });
+    } catch (e) {
+      console.error("Failed to init RSMLAnnotator for", fieldName, e);
+    }
+  };
+
+  // Keep editableData in sync when user types in any textarea
+  const handleTextareaInput = (fieldName, e) => {
+    const value = e.target.value;
+    setEditableData((prev) => ({ ...prev, [fieldName]: value }));
+  };
+
+  // ── Save: update grid + persist to backend ───────────────────────────────
+  const handleSave = async (fieldName) => {
+    const value = editableData[fieldName] ?? "";
+    setSavingField(fieldName);
+    try {
+      // 1. Update the grid row visually
+      if (onSave) {
+        onSave({ [fieldName]: value });
       }
+      // 2. Persist to the backend
+      const rowId = rowData?._id;
+      const pid = projectId ?? rowData?.projectId;
+      if (rowId && pid) {
+        const token = localStorage.getItem("token");
+        await axios.put(
+          `${import.meta.env.VITE_API_URL}/viewer/projects/${pid}/rows/${rowId}/cell`,
+          { field: fieldName, value },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      }
+    } catch (err) {
+      console.error("Error saving field:", fieldName, err);
+      alert("Failed to save. Please try again.");
+    } finally {
+      setSavingField(null);
     }
-  }, [editableData]);
-
-  const handleFieldChange = (fieldName, value) => {
-    setEditableData((prev) => ({
-      ...prev,
-      [fieldName]: value,
-    }));
   };
 
-  const handleSave = (fieldName) => {
-    if (onSave) {
-      onSave({ [fieldName]: editableData[fieldName] });
-    }
-  };
+  // ── Which fields to show ─────────────────────────────────────────────────
+  const rsmlFields = columnDefs.filter((colDef) => {
+    const f = colDef.field?.toLowerCase() ?? "";
+    return (
+      !f.includes("audio") &&
+      !f.includes("segment") &&
+      !f.includes("batch") &&
+      !f.includes("file") &&
+      !f.includes("path") &&
+      (f.includes("verbatim") ||
+        f.includes("normalized") ||
+        f.includes("rsml_") ||
+        f.includes("hypothesis") ||
+        f.includes("sarvam"))
+    );
+  });
+
+  const metaGroups = [
+    { label: "File", match: (f) => f.includes("file") || f.includes("path") },
+    { label: "Segment", match: (f) => f.includes("segment") },
+    { label: "Batch", match: (f) => f.includes("batch") },
+    { label: "Audio", match: (f) => f.includes("audio") },
+  ];
 
   return (
     <div
-      className="rsml-editor-overlay"
       style={{
         position: "fixed",
         top: 0,
@@ -56,7 +126,6 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
       }}
     >
       <div
-        className="rsml-editor-modal"
         style={{
           width: "80%",
           height: "80%",
@@ -68,13 +137,8 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
           gap: "10px",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3>RSML Editor</h3>
           <button
             onClick={onClose}
@@ -91,6 +155,7 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
           </button>
         </div>
 
+        {/* Metadata row */}
         <div
           style={{
             marginBottom: "15px",
@@ -100,230 +165,25 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
             border: "1px solid #ddd",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: "20px",
-            }}
-          >
-            <div style={{ flex: 1, maxWidth: "200px" }}>
-              <h4
-                style={{
-                  margin: "0 0 3px 0",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                  color: "#333",
-                }}
-              >
-                File
-              </h4>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  fontSize: "11px",
-                }}
-              >
-                {columnDefs
-                  .filter((colDef) => {
-                    const fieldName = colDef.field.toLowerCase();
-                    return (
-                      fieldName.includes("file") || fieldName.includes("path")
-                    );
-                  })
-                  .slice(0, 1) // Limit to 1 item
-                  .map((colDef) => {
-                    const fieldName = colDef.field;
-                    const fieldValue = editableData[fieldName] || "";
-                    return (
-                      <div
-                        key={fieldName}
-                        style={{ display: "flex", flexDirection: "column" }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: "bold",
-                            color: "#666",
-                            marginBottom: "1px",
-                          }}
-                        >
-                          {colDef.headerName || fieldName}:
-                        </span>
-                        <span style={{ color: "#333", wordBreak: "break-all" }}>
-                          {fieldValue.length > 15
-                            ? fieldValue.substring(0, 15) + "..."
-                            : fieldValue || "N/A"}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            <div style={{ flex: 1, maxWidth: "200px" }}>
-              <h4
-                style={{
-                  margin: "0 0 3px 0",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                  color: "#333",
-                }}
-              >
-                Segment
-              </h4>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  fontSize: "11px",
-                }}
-              >
-                {columnDefs
-                  .filter((colDef) => {
-                    const fieldName = colDef.field.toLowerCase();
-                    return fieldName.includes("segment");
-                  })
-                  .slice(0, 1) // Limit to 1 item
-                  .map((colDef) => {
-                    const fieldName = colDef.field;
-                    const fieldValue = editableData[fieldName] || "";
-                    return (
-                      <div
-                        key={fieldName}
-                        style={{ display: "flex", flexDirection: "column" }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: "bold",
-                            color: "#666",
-                            marginBottom: "1px",
-                          }}
-                        >
-                          {colDef.headerName || fieldName}:
-                        </span>
-                        <span style={{ color: "#333", wordBreak: "break-all" }}>
-                          {fieldValue.length > 15
-                            ? fieldValue.substring(0, 15) + "..."
-                            : fieldValue || "N/A"}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            <div style={{ flex: 1, maxWidth: "200px" }}>
-              <h4
-                style={{
-                  margin: "0 0 3px 0",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                  color: "#333",
-                }}
-              >
-                Batch
-              </h4>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  fontSize: "11px",
-                }}
-              >
-                {columnDefs
-                  .filter((colDef) => {
-                    const fieldName = colDef.field.toLowerCase();
-                    return fieldName.includes("batch");
-                  })
-                  .slice(0, 1) // Limit to 1 item
-                  .map((colDef) => {
-                    const fieldName = colDef.field;
-                    const fieldValue = editableData[fieldName] || "";
-                    return (
-                      <div
-                        key={fieldName}
-                        style={{ display: "flex", flexDirection: "column" }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: "bold",
-                            color: "#666",
-                            marginBottom: "1px",
-                          }}
-                        >
-                          {colDef.headerName || fieldName}:
-                        </span>
-                        <span style={{ color: "#333", wordBreak: "break-all" }}>
-                          {fieldValue.length > 15
-                            ? fieldValue.substring(0, 15) + "..."
-                            : fieldValue || "N/A"}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            <div style={{ flex: 1, maxWidth: "200px" }}>
-              <h4
-                style={{
-                  margin: "0 0 3px 0",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                  color: "#333",
-                }}
-              >
-                Audio
-              </h4>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  fontSize: "11px",
-                }}
-              >
-                {columnDefs
-                  .filter((colDef) => {
-                    const fieldName = colDef.field.toLowerCase();
-                    return fieldName.includes("audio");
-                  })
-                  .slice(0, 1) // Limit to 1 item
-                  .map((colDef) => {
-                    const fieldName = colDef.field;
-                    const fieldValue = editableData[fieldName] || "";
-                    return (
-                      <div
-                        key={fieldName}
-                        style={{ display: "flex", flexDirection: "column" }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: "bold",
-                            color: "#666",
-                            marginBottom: "1px",
-                          }}
-                        >
-                          {colDef.headerName || fieldName}:
-                        </span>
-                        <span style={{ color: "#333", wordBreak: "break-all" }}>
-                          {fieldValue.length > 15
-                            ? fieldValue.substring(0, 15) + "..."
-                            : fieldValue || "N/A"}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "20px" }}>
+            {metaGroups.map(({ label, match }) => {
+              const col = columnDefs.find((c) => match(c.field?.toLowerCase() ?? ""));
+              const val = col ? (editableData[col.field] ?? "") : "";
+              return (
+                <div key={label} style={{ flex: 1, maxWidth: "200px" }}>
+                  <h4 style={{ margin: "0 0 3px 0", fontSize: "14px", fontWeight: "bold", color: "#333" }}>
+                    {label}
+                  </h4>
+                  <span style={{ fontSize: "11px", color: "#333", wordBreak: "break-all" }}>
+                    {val ? (val.length > 15 ? val.substring(0, 15) + "…" : val) : "N/A"}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
+        {/* RSML Fields — one RSMLAnnotator per field */}
         <div
           style={{
             flex: 1,
@@ -333,156 +193,57 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
             gap: "15px",
           }}
         >
-          {columnDefs
-            .filter((colDef) => {
-              const fieldName = colDef.field.toLowerCase();
-              // Exclude audio/segment/batch/file/path columns and start from verbatim
-              return (
-                !fieldName.includes("audio") &&
-                !fieldName.includes("segment") &&
-                !fieldName.includes("batch") &&
-                !fieldName.includes("file") &&
-                !fieldName.includes("path") &&
-                (fieldName.includes("verbatim") ||
-                  fieldName.includes("normalized") ||
-                  fieldName.includes("rsml_") ||
-                  fieldName.includes("hypothesis") ||
-                  fieldName.includes("sarvam"))
-              );
-            })
-            .map((colDef) => {
-              const fieldName = colDef.field;
-              const fieldValue = editableData[fieldName] || "";
-              const isRsmlField =
-                fieldName.includes("rsml_") ||
-                fieldName.includes("verbatim") ||
-                fieldName.includes("normalized");
+          {rsmlFields.map((colDef) => {
+            const fieldName = colDef.field;
+            const isSaving = savingField === fieldName;
 
-              return (
+            return (
+              <div
+                key={fieldName}
+                style={{ border: "1px solid #ddd", borderRadius: "4px", padding: "10px" }}
+              >
+                {/* Field header + save button */}
                 <div
-                  key={fieldName}
                   style={{
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                    padding: "10px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "10px",
                   }}
                 >
-                  <div
+                  <h4 style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>
+                    {colDef.headerName || fieldName}
+                  </h4>
+                  <button
+                    onClick={() => handleSave(fieldName)}
+                    disabled={isSaving}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "10px",
+                      padding: "6px 12px",
+                      backgroundColor: isSaving ? "#6c757d" : "#28a745",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: isSaving ? "not-allowed" : "pointer",
+                      fontSize: "12px",
                     }}
                   >
-                    <h4
-                      style={{
-                        margin: 0,
-                        fontSize: "16px",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {colDef.headerName || fieldName}
-                    </h4>
-                    <button
-                      onClick={() => handleSave(fieldName)}
-                      style={{
-                        padding: "6px 12px",
-                        backgroundColor: "#28a745",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                      }}
-                    >
-                      Save {colDef.headerName || fieldName}
-                    </button>
-                  </div>
+                    {isSaving ? "Saving…" : `Save ${colDef.headerName || fieldName}`}
+                  </button>
+                </div>
 
-                  {isRsmlField ? (
-                    <div
-                      style={{ display: "flex", gap: "20px", height: "200px" }}
-                    >
-                      <div
-                        style={{
-                          flex: 1,
-                          display: "flex",
-                          flexDirection: "column",
-                        }}
-                      >
-                        <label
-                          style={{
-                            marginBottom: "5px",
-                            fontSize: "12px",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          Input (edit here):
-                        </label>
-                        <textarea
-                          ref={
-                            fieldName === columnDefs[0]?.field
-                              ? textareaRef
-                              : null
-                          }
-                          value={fieldValue}
-                          onChange={(e) =>
-                            handleFieldChange(fieldName, e.target.value)
-                          }
-                          style={{
-                            flex: 1,
-                            fontFamily: "monospace",
-                            resize: "none",
-                            padding: "10px",
-                            border: "1px solid #ccc",
-                            borderRadius: "4px",
-                          }}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          flex: 1,
-                          display: "flex",
-                          flexDirection: "column",
-                        }}
-                      >
-                        <label
-                          style={{
-                            marginBottom: "5px",
-                            fontSize: "12px",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          Preview:
-                        </label>
-                        <div
-                          ref={
-                            fieldName === columnDefs[0]?.field
-                              ? outputRef
-                              : null
-                          }
-                          className="rendered-transcript"
-                          style={{
-                            flex: 1,
-                            background: "#f9f9f9",
-                            overflowY: "auto",
-                            border: "1px solid #ccc",
-                            borderRadius: "4px",
-                            padding: "10px",
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                  ) : (
+                {/* Two-panel: textarea | preview */}
+                <div style={{ display: "flex", gap: "20px", height: "200px" }}>
+                  {/* Input */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                    <label style={{ marginBottom: "5px", fontSize: "12px", fontWeight: "bold" }}>
+                      Input (edit here):
+                    </label>
                     <textarea
-                      value={fieldValue}
-                      onChange={(e) =>
-                        handleFieldChange(fieldName, e.target.value)
-                      }
+                      ref={getTextareaRef(fieldName)}
+                      defaultValue={rowData?.[fieldName] ?? ""}
+                      onInput={(e) => handleTextareaInput(fieldName, e)}
                       style={{
-                        width: "100%",
-                        height: "100px",
+                        flex: 1,
                         fontFamily: "monospace",
                         resize: "none",
                         padding: "10px",
@@ -490,10 +251,29 @@ const RSMLEditor = ({ rowData = null, columnDefs = [], onSave, onClose }) => {
                         borderRadius: "4px",
                       }}
                     />
-                  )}
+                  </div>
+                  {/* Preview (RSMLAnnotator output target) */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                    <label style={{ marginBottom: "5px", fontSize: "12px", fontWeight: "bold" }}>
+                      Preview:
+                    </label>
+                    <div
+                      ref={getOutputRef(fieldName)}
+                      className="rendered-transcript"
+                      style={{
+                        flex: 1,
+                        background: "#f9f9f9",
+                        overflowY: "auto",
+                        border: "1px solid #ccc",
+                        borderRadius: "4px",
+                        padding: "10px",
+                      }}
+                    />
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

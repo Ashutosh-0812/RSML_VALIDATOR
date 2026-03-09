@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  # ── MongoDB ──────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: rsml_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - rsml_net
+
+  # ── Backend (Express API + seed on first run) ─────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rsml_backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      MONGO_URI: mongodb://mongo:27017/rsml_validator
+      JWT_SECRET: ${JWT_SECRET:-7fce4b9190aa767c33af687e5adec9d15d5a198ead786ce04cbae3dc31461fa0}
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    networks:
+      - rsml_net
+
+  # ── Frontend (Vite build → Nginx) ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Point the frontend at the backend. Change this to your server's IP/domain in production.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+    container_name: rsml_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - rsml_net
+
+volumes:
+  mongo_data:
+
+networks:
+  rsml_net:
+    driver: bridge

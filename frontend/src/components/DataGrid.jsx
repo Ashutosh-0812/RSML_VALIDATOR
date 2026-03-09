@@ -25,6 +25,9 @@ const DataGrid = ({ projectId }) => {
   const [gridApi, setGridApi] = useState(null);
   const [columnDefs, setColumnDefs] = useState([]);
   const [projectInfo, setProjectInfo] = useState(null);
+  const [customColumns, setCustomColumns] = useState([]);
+  const [newColName, setNewColName] = useState("");
+  const [addingCol, setAddingCol] = useState(false);
   const [rsmlEditorState, setRsmlEditorState] = useState({
     isOpen: false,
     rowData: null,
@@ -50,6 +53,7 @@ const DataGrid = ({ projectId }) => {
 
         const { project, data } = response.data;
         setProjectInfo(project);
+        setCustomColumns(project.customColumns || []);
 
         // Setup Columns
         if (project.headers && project.headers.length > 0) {
@@ -154,6 +158,19 @@ const DataGrid = ({ projectId }) => {
             cols.push(colDef);
           });
 
+          // 3. Add custom columns (user-added)
+          if (project.customColumns && project.customColumns.length > 0) {
+            project.customColumns.forEach((colName) => {
+              cols.push({
+                headerName: colName,
+                field: `__custom__${colName}`,
+                editable: true,
+                filter: true,
+                resizable: true,
+              });
+            });
+          }
+
           setColumnDefs(cols);
         }
       } catch (error) {
@@ -162,6 +179,101 @@ const DataGrid = ({ projectId }) => {
     };
 
     fetchProjectInfo();
+  }, [projectId]);
+
+  // ─── Build column defs helper (called after add/remove) ──────────────────
+  const rebuildCustomCols = useCallback((cols) => {
+    if (!cols || cols.length === 0) return [];
+    return cols.map((colName) => ({
+      headerName: colName,
+      field: `__custom__${colName}`,
+      editable: true,
+      filter: true,
+      resizable: true,
+    }));
+  }, []);
+
+  // ─── Add Custom Column ────────────────────────────────────────────────────
+  const handleAddCustomColumn = useCallback(async () => {
+    const trimmed = newColName.trim();
+    if (!trimmed) return;
+    if (customColumns.includes(trimmed)) {
+      alert(`Column "${trimmed}" already exists.`);
+      return;
+    }
+    setAddingCol(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}/custom-columns`,
+        { colName: trimmed },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const updated = res.data.customColumns;
+      setCustomColumns(updated);
+      setNewColName("");
+      // Rebuild columnDefs: preserve non-custom cols, replace custom section
+      setColumnDefs((prev) => {
+        const nonCustom = prev.filter((c) => !c.field?.startsWith("__custom__"));
+        return [...nonCustom, ...rebuildCustomCols(updated)];
+      });
+    } catch (err) {
+      console.error("Error adding custom column:", err);
+      alert(err?.response?.data?.message || "Failed to add column.");
+    } finally {
+      setAddingCol(false);
+    }
+  }, [newColName, customColumns, projectId, rebuildCustomCols]);
+
+  // ─── Remove Custom Column ─────────────────────────────────────────────────
+  const handleRemoveCustomColumn = useCallback(async (colName) => {
+    if (!window.confirm(`Remove column "${colName}"?`)) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.delete(
+        `${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}/custom-columns/${encodeURIComponent(colName)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const updated = res.data.customColumns;
+      setCustomColumns(updated);
+      setColumnDefs((prev) => {
+        const nonCustom = prev.filter((c) => !c.field?.startsWith("__custom__"));
+        return [...nonCustom, ...rebuildCustomCols(updated)];
+      });
+    } catch (err) {
+      console.error("Error removing custom column:", err);
+      alert("Failed to remove column.");
+    }
+  }, [projectId, rebuildCustomCols]);
+
+  // ─── Save cell value on edit ──────────────────────────────────────────────
+  const handleCellValueChanged = useCallback(async (params) => {
+    const { data, colDef, newValue } = params;
+    const rowId = data._id;
+    const field = colDef.field;
+    if (!rowId || !field) return;
+
+    const token = localStorage.getItem("token");
+    try {
+      if (field.startsWith("__custom__")) {
+        const colName = field.replace("__custom__", "");
+        await axios.put(
+          `${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}/rows/${rowId}/custom-cell`,
+          { colName, value: newValue ?? "" },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } else {
+        await axios.put(
+          `${import.meta.env.VITE_API_URL}/viewer/projects/${projectId}/rows/${rowId}/cell`,
+          { field, value: newValue ?? "" },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      }
+    } catch (err) {
+      console.error("Error saving cell:", err);
+      // Roll back the value in the grid node
+      params.node.setDataValue(field, params.oldValue);
+    }
   }, [projectId]);
 
   const handleCellDoubleClicked = useCallback((params) => {
@@ -272,6 +384,8 @@ const DataGrid = ({ projectId }) => {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            flexWrap: "wrap",
+            gap: "8px",
           }}
         >
           <h3 style={{ margin: 0 }}>
@@ -283,6 +397,76 @@ const DataGrid = ({ projectId }) => {
               </span>
             )}
           </h3>
+
+          {/* ── Custom Column Toolbar ── */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            {customColumns.map((col) => (
+              <span
+                key={col}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  background: "#dbeafe",
+                  border: "1px solid #93c5fd",
+                  borderRadius: "12px",
+                  padding: "2px 8px",
+                  fontSize: "0.78em",
+                  color: "#1e40af",
+                  fontWeight: 500,
+                }}
+              >
+                {col}
+                <button
+                  onClick={() => handleRemoveCustomColumn(col)}
+                  title={`Remove column "${col}"`}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#ef4444",
+                    fontWeight: "bold",
+                    lineHeight: 1,
+                    padding: "0 2px",
+                    fontSize: "1em",
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              placeholder="New column name…"
+              value={newColName}
+              onChange={(e) => setNewColName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddCustomColumn()}
+              style={{
+                border: "1px solid #93c5fd",
+                borderRadius: "4px",
+                padding: "4px 8px",
+                fontSize: "0.85em",
+                outline: "none",
+                width: "160px",
+              }}
+            />
+            <button
+              onClick={handleAddCustomColumn}
+              disabled={addingCol || !newColName.trim()}
+              style={{
+                backgroundColor: addingCol || !newColName.trim() ? "#93c5fd" : "#2563eb",
+                color: "white",
+                border: "none",
+                padding: "5px 12px",
+                borderRadius: "4px",
+                cursor: addingCol || !newColName.trim() ? "not-allowed" : "pointer",
+                fontSize: "0.85em",
+                fontWeight: 500,
+              }}
+            >
+              {addingCol ? "Adding…" : "+ Add Column"}
+            </button>
+          </div>
         </div>
 
         <div
@@ -328,9 +512,10 @@ const DataGrid = ({ projectId }) => {
                 cacheBlockSize={1}
                 onGridReady={onGridReady}
                 onCellDoubleClicked={handleCellDoubleClicked}
+                onCellValueChanged={handleCellValueChanged}
                 defaultColDef={{
-                  sortable: false, // Server-side sort not implemented
-                  filter: false, // Server-side filter not implemented yet
+                  sortable: false,
+                  filter: false,
                 }}
               />
             </div>
@@ -343,6 +528,7 @@ const DataGrid = ({ projectId }) => {
           columnDefs={columnDefs}
           onSave={handleRsmlSave}
           onClose={handleRsmlClose}
+          projectId={projectId}
         />
       )}
     </div>
