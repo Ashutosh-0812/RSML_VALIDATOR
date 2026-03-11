@@ -1,18 +1,23 @@
-# ── Backend Dockerfile ──────────────────────────────────────────────────────
-FROM node:20-alpine
+# Use the official Node.js runtime as base image
+FROM node:18-alpine
 
+# Set working directory
 WORKDIR /app
 
-# Install dependencies first (layer cache)
+# Copy package files
 COPY package*.json ./
-RUN npm ci --omit=dev
 
-# Copy source
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
 COPY . .
 
-# Make entrypoint executable
-RUN chmod +x /app/entrypoint.sh
+# Create uploads directory if it doesn't exist
+RUN mkdir -p uploads
 
+# Expose the port the app runs on
 EXPOSE 5000
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Define the command to run the application
+CMD ["npm", "start"]

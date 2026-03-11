@@ -1,29 +1,33 @@
-# ── Stage 1: Build ───────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+# Multi-stage build for React app
+# Stage 1: Build the application
+FROM node:18-alpine as builder
 
+# Set working directory
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
+
+# Install dependencies
 RUN npm ci
 
+# Copy source code
 COPY . .
 
-# VITE_API_URL is baked in at build time.
-# Pass it via --build-arg when running: docker build --build-arg VITE_API_URL=https://api.example.com .
-ARG VITE_API_URL=http://localhost:5000
-ENV VITE_API_URL=$VITE_API_URL
-
+# Build the application
 RUN npm run build
 
-# ── Stage 2: Serve with Nginx ─────────────────────────────────────────────────
+# Stage 2: Serve the application with Nginx
 FROM nginx:alpine
 
-# Copy built assets
+# Copy build files from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Nginx config: serve SPA — all routes fall back to index.html
+# Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Expose port 80
 EXPOSE 80
 
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
